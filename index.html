@@ -27,6 +27,7 @@
             <div class="col text-center">
                 <h1>QRコードリーダー</h1>
                 <button id="startScanButton" class="btn btn-primary btn-lg mt-3">QRコードを読み取る</button>
+                <button id="downloadDataButton" class="btn btn-secondary btn-lg mt-3">データをダウンロード</button>
                 <video id="preview" style="display:none;" autoplay></video>
                 <canvas id="canvas"></canvas>
                 <p id="msg" class="mt-3"></p>
@@ -43,6 +44,8 @@
     </div>
 
     <script>
+        let scanning = false;
+
         document.getElementById("startScanButton").addEventListener("click", function() {
             let video = document.getElementById("preview");
             let canvas = document.getElementById("canvas");
@@ -55,46 +58,41 @@
                 video.setAttribute("playsinline", true); // iOS対応
                 video.style.display = "block";
                 video.play();
+                scanning = true;
                 requestAnimationFrame(tick);
             }).catch((err) => {
                 msg.innerText = "カメラにアクセスできませんでした: " + err.message;
             });
 
             function tick() {
-                if (video.readyState === video.HAVE_ENOUGH_DATA) {
+                if (video.readyState === video.HAVE_ENOUGH_DATA && scanning) {
                     canvas.height = video.videoHeight;
                     canvas.width = video.videoWidth;
                     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
                     let img = ctx.getImageData(0, 0, canvas.width, canvas.height);
                     let code = jsQR(img.data, img.width, img.height, { inversionAttempts: "dontInvert" });
                     if (code) {
-                        drawRect(code.location);// Rect
-                        msg.innerText = code.data;// Data
+                        drawRect(code.location); // Rect
+                        msg.innerText = code.data; // Data
+
+                        scanning = false;
+                        video.srcObject.getTracks().forEach(track => track.stop()); // カメラストリームを停止
 
                         var quantity = prompt("数を入力してください:", "1");
                         if (quantity != null) {
                             var date = new Date();
                             var dateString = date.getFullYear() + "-" + (date.getMonth() + 1) + "-" + date.getDate();
 
-                            // QRコードデータを表示
-                            var qrDataList = document.getElementById("qrDataList");
-                            var div = document.createElement("div");
-                            div.className = "qr-data";
-                            div.innerHTML = `
-                                <p>QRコード: ${code.data}</p>
-                                <p>数量: ${quantity}</p>
-                                <p>日付: ${dateString}</p>
-                                <label><input type="checkbox" onchange="markCompleted(this)"> 進度訂正済み</label>
-                            `;
-                            qrDataList.appendChild(div);
-
-                            alert("QRコードが読み取られました: " + code.data);
+                            // QRコードデータをローカルストレージに保存
+                            saveQrData(code.data, quantity, dateString);
                         }
                     } else {
                         msg.innerText = "QRコードを検出中...";
                     }
                 }
-                requestAnimationFrame(tick);
+                if (scanning) {
+                    requestAnimationFrame(tick);
+                }
             }
 
             function drawRect(location) {
@@ -112,16 +110,63 @@
                 ctx.lineTo(end.x, end.y);
                 ctx.stroke();
             }
+
+            function saveQrData(qrData, quantity, date) {
+                let storedData = JSON.parse(localStorage.getItem("qrDataList")) || [];
+                storedData.push({ qrData, quantity, date, completed: false });
+                localStorage.setItem("qrDataList", JSON.stringify(storedData));
+
+                // 追加したデータを表示
+                displayQrData();
+            }
+
+            function displayQrData() {
+                let storedData = JSON.parse(localStorage.getItem("qrDataList")) || [];
+                const sortedData = storedData.sort((a, b) => new Date(b.date) - new Date(a.date));
+                const qrDataList = document.getElementById("qrDataList");
+                qrDataList.innerHTML = "";
+
+                sortedData.forEach(item => {
+                    const div = document.createElement("div");
+                    div.className = "qr-data";
+                    div.innerHTML = `
+                        <p>QRコード: ${item.qrData}</p>
+                        <p>数量: ${item.quantity}</p>
+                        <p>日付: ${item.date}</p>
+                        <label><input type="checkbox" ${item.completed ? 'checked' : ''} onchange="markCompleted(this, '${item.qrData}')"> 進度訂正済み</label>
+                    `;
+                    qrDataList.appendChild(div);
+                });
+            }
+
+            window.markCompleted = function(checkbox, qrData) {
+                let storedData = JSON.parse(localStorage.getItem("qrDataList")) || [];
+                storedData = storedData.map(item => {
+                    if (item.qrData === qrData) {
+                        item.completed = checkbox.checked;
+                    }
+                    return item;
+                });
+                localStorage.setItem("qrDataList", JSON.stringify(storedData));
+                displayQrData();
+            };
+
+            // ページ読み込み時にQRコードデータを表示
+            displayQrData();
         });
 
-        // 進度訂正済みのマーク
-        function markCompleted(checkbox) {
-            if (checkbox.checked) {
-                checkbox.parentElement.style.textDecoration = "line-through";
-            } else {
-                checkbox.parentElement.style.textDecoration = "none";
-            }
-        }
+        document.getElementById("downloadDataButton").addEventListener("click", function() {
+            let storedData = JSON.parse(localStorage.getItem("qrDataList")) || [];
+            const blob = new Blob([JSON.stringify(storedData, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'qr-data-backup.json';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        });
     </script>
 </body>
 </html>
