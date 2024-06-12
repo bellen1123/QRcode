@@ -4,14 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>QR Code Reader</title>
-    <script src="https://rawgit.com/schmich/instascan-builds/master/instascan.min.js"></script>
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/jsqr/dist/jsQR.js"></script>
     <style>
         #preview {
             width: 100%;
             height: auto;
-        }
-        .container {
-            margin: 20px;
         }
         .qr-data {
             border: 1px solid #ccc;
@@ -21,61 +19,71 @@
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>QRコードリーダー</h1>
-        <button id="startScanButton">QRコードを読み取る</button>
-        <video id="preview" style="display:none;"></video>
-        <div id="qrDataContainer">
-            <h2>QRコードデータ</h2>
-            <div id="qrDataList"></div>
+    <div class="container mt-5">
+        <div class="row">
+            <div class="col text-center">
+                <h1>QRコードリーダー</h1>
+                <input type="file" id="fileInput" capture="environment" accept="image/*" style="display: none;">
+                <button id="startScanButton" class="btn btn-primary btn-lg mt-3">QRコードを読み取る</button>
+            </div>
+        </div>
+        <div class="row mt-5">
+            <div class="col">
+                <div id="qrDataContainer">
+                    <h2>QRコードデータ</h2>
+                    <div id="qrDataList"></div>
+                </div>
+            </div>
         </div>
     </div>
 
     <script>
-        // QRコードリーダーの初期化
-        let scanner = new Instascan.Scanner({ video: document.getElementById('preview') });
-        scanner.addListener('scan', function (content) {
-            console.log(content);
-            var quantity = prompt("数を入力してください:", "1");
-            if (quantity != null) {
-                var date = new Date();
-                var dateString = date.getFullYear() + "-" + (date.getMonth() + 1) + "-" + date.getDate();
-
-                // QRコードデータを表示
-                var qrDataList = document.getElementById("qrDataList");
-                var div = document.createElement("div");
-                div.className = "qr-data";
-                div.innerHTML = `
-                    <p>QRコード: ${content}</p>
-                    <p>数量: ${quantity}</p>
-                    <p>日付: ${dateString}</p>
-                    <label><input type="checkbox" onchange="markCompleted(this)"> 進度訂正済み</label>
-                `;
-                qrDataList.appendChild(div);
-
-                alert("QRコードが読み取られました: " + content);
-            }
+        document.getElementById("startScanButton").addEventListener("click", function() {
+            document.getElementById("fileInput").click();
         });
 
-        // カメラモードを開始
-        document.getElementById("startScanButton").addEventListener("click", function() {
-            document.getElementById("preview").style.display = "block";
-            Instascan.Camera.getCameras().then(function (cameras) {
-                if (cameras.length > 0) {
-                    let selectedCamera = cameras[0];
-                    // 外カメラを選択する
-                    cameras.forEach(camera => {
-                        if (camera.name.toLowerCase().includes('back')) {
-                            selectedCamera = camera;
+        document.getElementById("fileInput").addEventListener("change", function(event) {
+            if (event.target.files.length > 0) {
+                var file = event.target.files[0];
+                var reader = new FileReader();
+                reader.onload = function(e) {
+                    var img = new Image();
+                    img.onload = function() {
+                        var canvas = document.createElement('canvas');
+                        var context = canvas.getContext('2d');
+                        canvas.width = img.width;
+                        canvas.height = img.height;
+                        context.drawImage(img, 0, 0, canvas.width, canvas.height);
+                        var imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+                        var code = jsQR(imageData.data, canvas.width, canvas.height);
+                        if (code) {
+                            var quantity = prompt("数を入力してください:", "1");
+                            if (quantity != null) {
+                                var date = new Date();
+                                var dateString = date.getFullYear() + "-" + (date.getMonth() + 1) + "-" + date.getDate();
+
+                                // QRコードデータを表示
+                                var qrDataList = document.getElementById("qrDataList");
+                                var div = document.createElement("div");
+                                div.className = "qr-data";
+                                div.innerHTML = `
+                                    <p>QRコード: ${code.data}</p>
+                                    <p>数量: ${quantity}</p>
+                                    <p>日付: ${dateString}</p>
+                                    <label><input type="checkbox" onchange="markCompleted(this)"> 進度訂正済み</label>
+                                `;
+                                qrDataList.appendChild(div);
+
+                                alert("QRコードが読み取られました: " + code.data);
+                            }
+                        } else {
+                            alert("QRコードが見つかりませんでした。");
                         }
-                    });
-                    scanner.start(selectedCamera);
-                } else {
-                    console.error('カメラが見つかりません。');
-                }
-            }).catch(function (e) {
-                console.error(e);
-            });
+                    };
+                    img.src = e.target.result;
+                };
+                reader.readAsDataURL(file);
+            }
         });
 
         // 進度訂正済みのマーク
