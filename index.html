@@ -29,6 +29,7 @@
                 <button id="startScanButton" class="btn btn-primary btn-lg mt-3">QRコードを読み取る</button>
                 <video id="preview" style="display:none;" autoplay></video>
                 <canvas id="canvas"></canvas>
+                <p id="msg" class="mt-3"></p>
             </div>
         </div>
         <div class="row mt-5">
@@ -42,40 +43,32 @@
     </div>
 
     <script>
-        const video = document.getElementById('preview');
-        const canvas = document.getElementById('canvas');
-        const context = canvas.getContext('2d');
-        let scanning = false;
-
         document.getElementById("startScanButton").addEventListener("click", function() {
-            navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } }).then(function(stream) {
+            let video  = document.getElementById("preview");
+            let canvas = document.getElementById("canvas");
+            let ctx    = canvas.getContext("2d");
+            let msg    = document.getElementById("msg");
+
+            const userMedia = {video: {facingMode: "environment"}};
+            navigator.mediaDevices.getUserMedia(userMedia).then((stream)=>{
                 video.srcObject = stream;
-                video.setAttribute("playsinline", true); // iOS対応
-                video.style.display = "block";
+                video.setAttribute("playsinline", true);
                 video.play();
-                requestAnimationFrame(tick);
+                startTick();
             });
-        });
 
-        function tick() {
-            if (video.readyState === video.HAVE_ENOUGH_DATA) {
-                canvas.height = video.videoHeight;
-                canvas.width = video.videoWidth;
-                context.drawImage(video, 0, 0, canvas.width, canvas.height);
+            function startTick(){
+                msg.innerText = "Loading video...";
+                if(video.readyState === video.HAVE_ENOUGH_DATA){
+                    canvas.height = video.videoHeight;
+                    canvas.width = video.videoWidth;
+                    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                    let img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                    let code = jsQR(img.data, img.width, img.height, {inversionAttempts: "dontInvert"});
+                    if(code){
+                        drawRect(code.location);// Rect
+                        msg.innerText = code.data;// Data
 
-                const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
-                const code = jsQR(imageData.data, imageData.width, imageData.height, {
-                    inversionAttempts: "dontInvert",
-                });
-
-                if (code) {
-                    drawLine(code.location.topLeftCorner, code.location.topRightCorner, "#FF3B58");
-                    drawLine(code.location.topRightCorner, code.location.bottomRightCorner, "#FF3B58");
-                    drawLine(code.location.bottomRightCorner, code.location.bottomLeftCorner, "#FF3B58");
-                    drawLine(code.location.bottomLeftCorner, code.location.topLeftCorner, "#FF3B58");
-
-                    if (!scanning) {
-                        scanning = true;
                         var quantity = prompt("数を入力してください:", "1");
                         if (quantity != null) {
                             var date = new Date();
@@ -95,21 +88,29 @@
 
                             alert("QRコードが読み取られました: " + code.data);
                         }
-                        scanning = false;
+                    }else{
+                        msg.innerText = "Detecting QR-Code...";
                     }
                 }
+                setTimeout(startTick, 250);
             }
-            requestAnimationFrame(tick);
-        }
 
-        function drawLine(begin, end, color) {
-            context.beginPath();
-            context.moveTo(begin.x, begin.y);
-            context.lineTo(end.x, end.y);
-            context.lineWidth = 4;
-            context.strokeStyle = color;
-            context.stroke();
-        }
+            function drawRect(location){
+                drawLine(location.topLeftCorner,     location.topRightCorner);
+                drawLine(location.topRightCorner,    location.bottomRightCorner);
+                drawLine(location.bottomRightCorner, location.bottomLeftCorner);
+                drawLine(location.bottomLeftCorner,  location.topLeftCorner);
+            }
+
+            function drawLine(begin, end){
+                ctx.lineWidth = 4;
+                ctx.strokeStyle = "#FF3B58";
+                ctx.beginPath();
+                ctx.moveTo(begin.x, begin.y);
+                ctx.lineTo(end.x, end.y);
+                ctx.stroke();
+            }
+        });
 
         // 進度訂正済みのマーク
         function markCompleted(checkbox) {
