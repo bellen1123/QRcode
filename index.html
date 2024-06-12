@@ -52,7 +52,7 @@
             const userMedia = { video: { facingMode: "environment" } };
             navigator.mediaDevices.getUserMedia(userMedia).then((stream) => {
                 video.srcObject = stream;
-                video.setAttribute("playsinline", true);
+                video.setAttribute("playsinline", true); // iOS対応
                 video.style.display = "block";
                 video.play();
                 requestAnimationFrame(tick);
