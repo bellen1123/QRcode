@@ -62,7 +62,14 @@
             document.getElementById("preview").style.display = "block";
             Instascan.Camera.getCameras().then(function (cameras) {
                 if (cameras.length > 0) {
-                    scanner.start(cameras[0]);
+                    let selectedCamera = cameras[0];
+                    // 外カメラを選択する
+                    cameras.forEach(camera => {
+                        if (camera.name.toLowerCase().includes('back')) {
+                            selectedCamera = camera;
+                        }
+                    });
+                    scanner.start(selectedCamera);
                 } else {
                     console.error('カメラが見つかりません。');
                 }
@@ -82,3 +89,4 @@
     </script>
 </body>
 </html>
+
