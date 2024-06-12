@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QR Code Reader</title>
+    <script src="https://www.gstatic.com/firebasejs/8.6.8/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.6.8/firebase-database.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.6.8/firebase-auth.js"></script>
+    <script src="https://rawgit.com/schmich/instascan-builds/master/instascan.min.js"></script>
+</head>
+<body>
+    <h1>QRコードリーダー</h1>
+    <video id="preview" style="width:100%; height:auto;"></video>
+    <script>
+        // Firebaseの初期化
+        var firebaseConfig = {
+            apiKey: "YOUR_API_KEY",
+            authDomain: "YOUR_AUTH_DOMAIN",
+            databaseURL: "YOUR_DATABASE_URL",
+            projectId: "YOUR_PROJECT_ID",
+            storageBucket: "YOUR_STORAGE_BUCKET",
+            messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+            appId: "YOUR_APP_ID"
+        };
+        firebase.initializeApp(firebaseConfig);
+        var database = firebase.database();
+        
+        // 匿名認証
+        firebase.auth().signInAnonymously().catch(function(error) {
+            console.error("認証エラー:", error);
+        });
+
+        // QRコードリーダーの初期化
+        let scanner = new Instascan.Scanner({ video: document.getElementById('preview') });
+        scanner.addListener('scan', function (content) {
+            console.log(content);
+            var quantity = prompt("数を入力してください:", "1");
+            if (quantity != null) {
+                var date = new Date();
+                var dateString = date.getFullYear() + "-" + (date.getMonth() + 1) + "-" + date.getDate();
+
+                // Firebaseにデータを保存
+                firebase.database().ref('qrcodes/' + dateString).push({
+                    content: content,
+                    quantity: quantity,
+                    timestamp: Date.now()
+                });
+
+                alert("QRコードが読み取られ、データが保存されました: " + content);
+            }
+        });
+
+        Instascan.Camera.getCameras().then(function (cameras) {
+            if (cameras.length > 0) {
+                scanner.start(cameras[0]);
+            } else {
+                console.error('カメラが見つかりません。');
+            }
+        }).catch(function (e) {
+            console.error(e);
+        });
+    </script>
+
+    <h2>データ検索</h2>
+    <input type="date" id="searchDate" />
+    <button onclick="searchData()">検索</button>
+    <ul id="dataList"></ul>
+
+    <script>
+        function searchData() {
+            var searchDate = document.getElementById("searchDate").value;
+            if (searchDate) {
+                firebase.database().ref('qrcodes/' + searchDate).once('value').then(function(snapshot) {
+                    var dataList = document.getElementById("dataList");
+                    dataList.innerHTML = "";
+                    snapshot.forEach(function(childSnapshot) {
+                        var data = childSnapshot.val();
+                        var li = document.createElement("li");
+                        li.textContent = "QRコード: " + data.content + ", 数量: " + data.quantity + ", 日時: " + new Date(data.timestamp).toLocaleString();
+                        dataList.appendChild(li);
+                    });
+                });
+            } else {
+                alert("検索する日付を選択してください。");
+            }
+        }
+    </script>
+</body>
+</html>
