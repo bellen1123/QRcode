@@ -16,6 +16,9 @@
             padding: 10px;
             margin-bottom: 10px;
         }
+        canvas {
+            display: none;
+        }
     </style>
 </head>
 <body>
@@ -23,8 +26,9 @@
         <div class="row">
             <div class="col text-center">
                 <h1>QRコードリーダー</h1>
-                <input type="file" id="fileInput" capture="environment" accept="image/*" style="display: none;">
                 <button id="startScanButton" class="btn btn-primary btn-lg mt-3">QRコードを読み取る</button>
+                <video id="preview" style="display:none;" autoplay></video>
+                <canvas id="canvas"></canvas>
             </div>
         </div>
         <div class="row mt-5">
@@ -38,53 +42,74 @@
     </div>
 
     <script>
+        const video = document.getElementById('preview');
+        const canvas = document.getElementById('canvas');
+        const context = canvas.getContext('2d');
+        let scanning = false;
+
         document.getElementById("startScanButton").addEventListener("click", function() {
-            document.getElementById("fileInput").click();
+            navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } }).then(function(stream) {
+                video.srcObject = stream;
+                video.setAttribute("playsinline", true); // iOS対応
+                video.style.display = "block";
+                video.play();
+                requestAnimationFrame(tick);
+            });
         });
 
-        document.getElementById("fileInput").addEventListener("change", function(event) {
-            if (event.target.files.length > 0) {
-                var file = event.target.files[0];
-                var reader = new FileReader();
-                reader.onload = function(e) {
-                    var img = new Image();
-                    img.onload = function() {
-                        var canvas = document.createElement('canvas');
-                        var context = canvas.getContext('2d');
-                        canvas.width = img.width;
-                        canvas.height = img.height;
-                        context.drawImage(img, 0, 0, canvas.width, canvas.height);
-                        var imageData = context.getImageData(0, 0, canvas.width, canvas.height);
-                        var code = jsQR(imageData.data, canvas.width, canvas.height);
-                        if (code) {
-                            var quantity = prompt("数を入力してください:", "1");
-                            if (quantity != null) {
-                                var date = new Date();
-                                var dateString = date.getFullYear() + "-" + (date.getMonth() + 1) + "-" + date.getDate();
+        function tick() {
+            if (video.readyState === video.HAVE_ENOUGH_DATA) {
+                canvas.height = video.videoHeight;
+                canvas.width = video.videoWidth;
+                context.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-                                // QRコードデータを表示
-                                var qrDataList = document.getElementById("qrDataList");
-                                var div = document.createElement("div");
-                                div.className = "qr-data";
-                                div.innerHTML = `
-                                    <p>QRコード: ${code.data}</p>
-                                    <p>数量: ${quantity}</p>
-                                    <p>日付: ${dateString}</p>
-                                    <label><input type="checkbox" onchange="markCompleted(this)"> 進度訂正済み</label>
-                                `;
-                                qrDataList.appendChild(div);
+                const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+                const code = jsQR(imageData.data, imageData.width, imageData.height, {
+                    inversionAttempts: "dontInvert",
+                });
 
-                                alert("QRコードが読み取られました: " + code.data);
-                            }
-                        } else {
-                            alert("QRコードが見つかりませんでした。");
+                if (code) {
+                    drawLine(code.location.topLeftCorner, code.location.topRightCorner, "#FF3B58");
+                    drawLine(code.location.topRightCorner, code.location.bottomRightCorner, "#FF3B58");
+                    drawLine(code.location.bottomRightCorner, code.location.bottomLeftCorner, "#FF3B58");
+                    drawLine(code.location.bottomLeftCorner, code.location.topLeftCorner, "#FF3B58");
+
+                    if (!scanning) {
+                        scanning = true;
+                        var quantity = prompt("数を入力してください:", "1");
+                        if (quantity != null) {
+                            var date = new Date();
+                            var dateString = date.getFullYear() + "-" + (date.getMonth() + 1) + "-" + date.getDate();
+
+                            // QRコードデータを表示
+                            var qrDataList = document.getElementById("qrDataList");
+                            var div = document.createElement("div");
+                            div.className = "qr-data";
+                            div.innerHTML = `
+                                <p>QRコード: ${code.data}</p>
+                                <p>数量: ${quantity}</p>
+                                <p>日付: ${dateString}</p>
+                                <label><input type="checkbox" onchange="markCompleted(this)"> 進度訂正済み</label>
+                            `;
+                            qrDataList.appendChild(div);
+
+                            alert("QRコードが読み取られました: " + code.data);
                         }
-                    };
-                    img.src = e.target.result;
-                };
-                reader.readAsDataURL(file);
+                        scanning = false;
+                    }
+                }
             }
-        });
+            requestAnimationFrame(tick);
+        }
+
+        function drawLine(begin, end, color) {
+            context.beginPath();
+            context.moveTo(begin.x, begin.y);
+            context.lineTo(end.x, end.y);
+            context.lineWidth = 4;
+            context.strokeStyle = color;
+            context.stroke();
+        }
 
         // 進度訂正済みのマーク
         function markCompleted(checkbox) {
